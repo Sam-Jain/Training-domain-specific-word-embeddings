@@ -9,13 +9,17 @@ import os
 import random
 import zipfile
 import numpy as np, tensorflow as tf
+import matplotlib.pyplot as plt
 
 batch_size=128
 
-batch = np.ones(shape=(batch_size), dtype=np.int32)
-labels = np.zeros(shape=(batch_size, 1), dtype=np.int32)
 a= 36 % 3668
+average_loss = 0
+m = [average_loss]
+for i in range(0,1000,1):
+    average_loss += -2
+    m.append(average_loss)
 
-matrix = np.random.random([1024, 64])  # 64-dimensional embeddings
-ids = np.array([0, 5, 17, 33])
-print(matrix[ids])  # prints a matrix of shape [4, 64]
+print(m)
+plt.plot(m)
+plt.show()

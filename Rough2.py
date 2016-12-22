@@ -8,6 +8,7 @@ import math
 import os
 import random
 import zipfile
+import matplotlib.pyplot as plt
 import numpy as np, tensorflow as tf
 
 
@@ -170,6 +171,7 @@ with tf.Session(graph=graph) as session:
   print("Initialized")
 
   average_loss = 0
+  average_plot = []
   for step in xrange(num_steps):
     batch_inputs, batch_labels = generate_batch(
         batch_size, num_skips, window_size)
@@ -179,6 +181,8 @@ with tf.Session(graph=graph) as session:
     # in the list of returned values for session.run()
     _, loss_val = session.run([optimizer, loss], feed_dict=feed_dict)
     average_loss += loss_val
+    average_plot.append(average_loss)
+
 
     if step % 1000 == 0:
       if step > 0:
@@ -186,7 +190,7 @@ with tf.Session(graph=graph) as session:
       # The average loss is an estimate of the loss over the last 2000 batches.
       print("Average loss at step ", step, ": ", average_loss)
       average_loss = 0
-      import matplotlib.pyplot as plt
-      plt.plot(average_loss)
 
 
+plt.plot(average_plot)
+plt.show()
