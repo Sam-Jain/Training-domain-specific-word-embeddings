@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -11,58 +10,7 @@ import random
 import zipfile
 import numpy as np, tensorflow as tf
 
-input_corpus = ["this is the first document for testing",
-                "India is a nuclear-weapon state; having conducted its first nuclear test in 1974, followed by another five tests in 1998.",
-                "In 1949, India recorded almost 1 million Hindu refugees into West Bengal and other states from East Pakistan, owing to communal violence, intimidation and repression from Muslim authorities.",
-                "Thus India's leaders were faced with the prospect of inheriting a fragmented nation with independent provinces and kingdoms dispersed across the mainland.",
-                "The Constituent Assembly adopted the Constitution of India, drafted by a committee headed by Dr. B. R. Ambedkar, on 26 November 1949.",
-                "Prime Minister Nehru, with his charismatic brilliance, led the Congress to major election victories in 1957 and 1962.",
-                "Nehru appointed the States Re-organisation Commission, upon whose recommendations, the States Reorganisation Act was passed in 1956.",
-                "In 1961, after continual petitions for a peaceful handover, India invaded and annexed the Portuguese colony of Goa on the west coast of India.",
-                "Economic and social problems, as well as allegations of corruption caused increasing political unrest across India, culminating in the Bihar Movement.",
-                "The Congress party chose Rajiv Gandhi, Indira's older son as the next Prime Minister. "]
-'''
-domain_corpus = ['india','nation','constitution','congress','states']
 
-#generating (w,c) pairs with window=1
-window_size = 1
-
-def get_context(word):
-    for i in range(0,9,1):
-        for j in range(0,4,1):
-            print(i,j)
-            if ip_corpus[i][j] == word:
-                set = [(word,ip_corpus[i][j-1],ip_corpus[i][j+1])]
-                print(set)
-            else:
-                print("Word not found")
-
-
-print(ip_corpus[1][2])
-get_context('state;')'''
-
-#Feeding the training data
-'''code to be filled
-Reading the data into list of strings
-1. removing the stop words
-2. remove words that appear less than 5 times
-3. tokenization and sentence splitting'''
-
-#Model
-
-#There are 3 cases for training the input corpus
-'''the domain specific words:
-Disease vocabulary V is provided as prior knowledge to Dis2Vec in order to generate disease specific word embeddings as
-explained in section 3.3. V is represented by a flat list of disease-related terms consisting of disease names (influenza, h7n9,
-plague, ebola, etc.), all possible words related to transmission methods(vectorborne, foodborne, waterborne, etc.), all possible
-words related to transmission agents (flea, domestic animal, mosquito, etc.), all possible words related to clinical symptoms
-(fever, nausea, paralysis, cough, headache, etc.) and all possible words related to exposures or risk factors (healthcare facility,
-slaughter, farmer, etc.). Total number of words in V is found to be 103. In Figure 3, we show the distribution of word counts
-associated with different taxonomical categories in the disease vocabulary (V ). As depicted in Figure 3, half of the words in
-V are terms related to clinical symptoms followed by exposures or risk factors (22.4%), transmission methods (13.8%) and
-transmission agent(s) (13.8%).'''
-#CASE 1: If (w,c) both belong to domain specific vectors
-vocabulary_size = 50000
 
 filename = 'test_data.txt'
 # Read the data into a list of strings.
@@ -72,16 +20,15 @@ def read_data(filename):
   return data
 
 
-words = read_data(filename) #data is saved into words
+words = read_data(filename)
 print('Data size', len(words))
+vocabulary_size = len(words)
 
-
-#Build the dictionary and replace rare words with UNK token.
-vocabulary_size = len(words) #this was given 5000
+print('this is words:',words)
 def build_dataset(words):
   count = [['UNK', -1]]
   count.extend(collections.Counter(words).most_common(vocabulary_size - 1))
-  dictionary = dict()
+  dictionary = dict() #the above line gives us the ('word',no_of_occurences) in the list count
   for word, _ in count:
     dictionary[word] = len(dictionary)
   data = list()
@@ -97,45 +44,56 @@ def build_dataset(words):
   reverse_dictionary = dict(zip(dictionary.values(), dictionary.keys()))
   return data, count, dictionary, reverse_dictionary
 
-data, count, dictionary, reverse_dictionary = build_dataset(words)
-del words  #To reduce memory.
 
-print('Most common words (+UNK)', count[:5])
-print('Sample data', data[:10], [reverse_dictionary[i] for i in data[:10]])
+data, count, dictionary, reverse_dictionary = build_dataset(words)
+print('data',data)
+print('count',count)
+print('dictionary',dictionary)
+print('reverse_dictionary',reverse_dictionary)
 
 data_index = 0
-#Function to generate a training batch for the skip-gram model.
+# Step 3: Function to generate a training batch for the skip-gram model.
 def generate_batch(batch_size, num_skips, window_size):
   global data_index
   assert batch_size % num_skips == 0
   assert num_skips <= 2 * window_size
   batch = np.ndarray(shape=(batch_size), dtype=np.int32)
   labels = np.ndarray(shape=(batch_size, 1), dtype=np.int32)
+  #print(batch)
+  #print(labels)
   span = 2 * window_size + 1  # [ window_size target window_size ]
   buffer = collections.deque(maxlen=span)
+  #print(span)
+  #print(buffer)
   for _ in range(span):
     buffer.append(data[data_index])
-    data_index = (data_index + 1) % len(data)
+    data_index = (data_index + 1) % len(data) #?????len(data) is always
+    #print(buffer)
+    #print(data_index)
+    #print(len(data))
   for i in range(batch_size // num_skips):
     target = window_size  # target label at the center of the buffer
     targets_to_avoid = [window_size]
     for j in range(num_skips):
       while target in targets_to_avoid:
         target = random.randint(0, span - 1)
+        #print('this is the target',target)
       targets_to_avoid.append(target)
+      #print('target to avoid',targets_to_avoid,j)
       batch[i * num_skips + j] = buffer[window_size]
       labels[i * num_skips + j, 0] = buffer[target]
+      #print('this is the batch', batch)
+      #print('this is the label', labels)
     buffer.append(data[data_index])
-    data_index = (data_index + 1) % len(data)
+    data_index = (data_index + 1) % len(data) #same as above????????
   return batch, labels
 
 batch, labels = generate_batch(batch_size=8, num_skips=2, window_size=1)
 
-'''for i in range(8):
-  print(batch[i], reverse_dictionary[batch[i]],
-        '->', labels[i, 0], reverse_dictionary[labels[i, 0]])
-'''
-# Step 4: Build and train a skip-gram model.
+#print(batch)
+#print(labels)
+
+#****************************************************************************************
 
 batch_size = 128
 embedding_size = 128  # Dimension of the embedding vector.
@@ -149,9 +107,8 @@ valid_size = 16     # Random set of words to evaluate similarity on.
 valid_window = 100  # Only pick dev samples in the head of the distribution.
 valid_examples = np.random.choice(valid_window, valid_size, replace=False)
 num_sampled = 64    # Number of negative examples to sample.
-
+#np.random.choice(a,size='output_shape',replace='with or without replacement') generates a random sample from a which is a 1d array
 graph = tf.Graph()
-
 with graph.as_default():
 
   # Input data.
@@ -175,26 +132,32 @@ with graph.as_default():
   # Compute the average NCE loss for the batch.
   # tf.nce_loss automatically draws a new sample of the negative labels each
   # time we evaluate the loss.
-  loss = tf.log()
-  '''loss = tf.reduce_mean(
+  #loss = tf.reduce_mean
+  '''  'x' is [[1., 1.]
+               [2., 2.]]
+       tf.reduce_mean(x) ==> 1.5
+       tf.reduce_mean(x, 0) ==> [1.5, 1.5]
+       tf.reduce_mean(x, 1) ==> [1.,  2.]'''
+
+  loss = tf.reduce_mean(
       tf.nn.nce_loss(weights=nce_weights,
                      biases=nce_biases,
                      labels=train_labels,
                      inputs=embed,
                      num_sampled=num_sampled,
                      num_classes=vocabulary_size))
-'''
+
   # Construct the SGD optimizer using a learning rate of 1.0.
   optimizer = tf.train.GradientDescentOptimizer(1.0).minimize(loss)
 
-  # Compute the cosine similarity between minibatch examples and all embeddings.
+  '''# Compute the cosine similarity between minibatch examples and all embeddings.
   norm = tf.sqrt(tf.reduce_sum(tf.square(embeddings), 1, keep_dims=True))
   normalized_embeddings = embeddings / norm
   valid_embeddings = tf.nn.embedding_lookup(
       normalized_embeddings, valid_dataset)
   similarity = tf.matmul(
       valid_embeddings, normalized_embeddings, transpose_b=True)
-
+  '''
   # Add variable initializer.
   init = tf.global_variables_initializer()
 
@@ -225,21 +188,5 @@ with tf.Session(graph=graph) as session:
       average_loss = 0
       import matplotlib.pyplot as plt
       plt.plot(average_loss)
-
-'''
-    # Note that this is expensive (~20% slowdown if computed every 500 steps)
-    if step % 10000 == 0:
-      sim = similarity.eval()
-      for i in xrange(valid_size):
-        valid_word = reverse_dictionary[valid_examples[i]]
-        top_k = 5  # number of nearest neighbors
-        nearest = (-sim[i, :]).argsort()[1:top_k + 1]
-        log_str = "Nearest to %s:" % valid_word
-        for k in xrange(top_k):
-          close_word = reverse_dictionary[nearest[k]]
-          log_str = "%s %s," % (log_str, close_word)
-        print(log_str)
-  final_embeddings = normalized_embeddings.eval()
-'''
 
 
