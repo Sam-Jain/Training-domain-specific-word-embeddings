@@ -54,6 +54,7 @@ print('reverse_dictionary',reverse_dictionary)
 
 data_index = 0
 # Step 3: Function to generate a training batch for the skip-gram model.
+#returns batch and labels
 def generate_batch(batch_size, num_skips, window_size):
   global data_index
   assert batch_size % num_skips == 0
@@ -90,10 +91,8 @@ def generate_batch(batch_size, num_skips, window_size):
   return batch, labels
 
 batch, labels = generate_batch(batch_size=8, num_skips=2, window_size=1)
-
 #print(batch)
 #print(labels)
-
 #****************************************************************************************
 
 batch_size = 128
@@ -108,7 +107,8 @@ valid_size = 16     # Random set of words to evaluate similarity on.
 valid_window = 100  # Only pick dev samples in the head of the distribution.
 valid_examples = np.random.choice(valid_window, valid_size, replace=False)
 num_sampled = 64    # Number of negative examples to sample.
-#np.random.choice(a,size='output_shape',replace='with or without replacement') generates a random sample from a which is a 1d array
+#NOTE:np.random.choice(a,size='output_shape',replace='with or without replacement') generates a random sample from a which is a 1d array
+
 graph = tf.Graph()
 with graph.as_default():
 
@@ -122,7 +122,7 @@ with graph.as_default():
     # Look up embeddings for inputs.
     embeddings = tf.Variable(
         tf.random_uniform([vocabulary_size, embedding_size], -1.0, 1.0)) #both are initialized above
-    embed = tf.nn.embedding_lookup(embeddings, train_inputs) #*********?????????????????**************
+    embed = tf.nn.embedding_lookup(embeddings, train_inputs)
 
     # Construct the variables for the NCE loss
     nce_weights = tf.Variable(
@@ -149,30 +149,33 @@ with graph.as_default():
                      num_classes=vocabulary_size))
 
   # Construct the SGD optimizer using a learning rate of 1.0.
-  optimizer = tf.train.GradientDescentOptimizer(1.0).minimize(loss)
+  optimizer = tf.train.GradientDescentOptimizer(0.01).minimize(loss)
 
-  '''# Compute the cosine similarity between minibatch examples and all embeddings.
+  # Compute the cosine similarity between minibatch examples and all embeddings.
   norm = tf.sqrt(tf.reduce_sum(tf.square(embeddings), 1, keep_dims=True))
   normalized_embeddings = embeddings / norm
   valid_embeddings = tf.nn.embedding_lookup(
       normalized_embeddings, valid_dataset)
   similarity = tf.matmul(
       valid_embeddings, normalized_embeddings, transpose_b=True)
-  '''
+
   # Add variable initializer.
   init = tf.global_variables_initializer()
 
 # Step 5: Begin training.
-num_steps = 10001
+training_epochs = 50001
+
+
 
 with tf.Session(graph=graph) as session:
+  #writer = tf.train.FileWriter("logs/", session.graph)
   # We must initialize all variables before we use them.
   init.run()
   print("Initialized")
 
   average_loss = 0
   average_plot = []
-  for step in xrange(num_steps):
+  for step in xrange(training_epochs):
     batch_inputs, batch_labels = generate_batch(
         batch_size, num_skips, window_size)
     feed_dict = {train_inputs: batch_inputs, train_labels: batch_labels}
@@ -183,6 +186,19 @@ with tf.Session(graph=graph) as session:
     average_loss += loss_val
     average_plot.append(average_loss)
 
+    if step % 10000 == 0:
+        sim = similarity.eval()
+        '''for i in xrange(valid_size):
+            valid_word = reverse_dictionary[valid_examples[i]]
+            top_k = 8  # number of nearest neighbors
+            nearest = (-sim[i, :]).argsort()[1:top_k + 1]
+            log_str = "Nearest to %s:" % valid_word
+            for k in xrange(top_k):
+                close_word = reverse_dictionary[nearest[k]]
+                log_str = "%s %s," % (log_str, close_word)
+            print(log_str)'''
+    final_embeddings = normalized_embeddings.eval()
+    #print(final_embeddings)
 
     if step % 1000 == 0:
       if step > 0:
@@ -191,6 +207,30 @@ with tf.Session(graph=graph) as session:
       print("Average loss at step ", step, ": ", average_loss)
       average_loss = 0
 
+    def plot_with_labels(low_dim_embs, labels, filename='tsne.png'):
+        assert low_dim_embs.shape[0] >= len(labels), "More labels than embeddings"
+        plt.figure(figsize=(18, 18))  # in inches
+        for i, label in enumerate(labels):
+            x, y = low_dim_embs[i, :]
+            plt.scatter(x, y)
+            plt.annotate(label,
+                         xy=(x, y),
+                         xytext=(5, 2),
+                         textcoords='offset points',
+                         ha='right',
+                         va='bottom')
+
+        plt.savefig(filename)
+
+
+    from sklearn.manifold import TSNE
+    import matplotlib.pyplot as plt
+
+    tsne = TSNE(perplexity=30, n_components=2, init='pca', n_iter=5000)
+    plot_only = 500
+    low_dim_embs = tsne.fit_transform(final_embeddings[:plot_only, :])
+    labels = [reverse_dictionary[i] for i in xrange(plot_only)]
+    plot_with_labels(low_dim_embs, labels)
 
 plt.plot(average_plot)
 plt.show()
