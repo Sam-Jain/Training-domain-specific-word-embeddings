@@ -27,3 +27,10 @@ if 'Strongman' in open('domain_words.txt').read().lower():
     print('True')
 else:
     print('not found')
+
+
+
+
+table1 = math.pow(10,8)
+
+print(table1)

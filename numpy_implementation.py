@@ -123,12 +123,12 @@ class UnigramTable:
     pie = 0.5
     #unigram table for (w,c) both belonging to domain_vocab
     def case1(self, vocab):
-        Xs = np.random.uniform(low=0, high=1)
-        if pie > Xs:
+        xs = np.random.uniform(low=0, high=1)
+        if 0.5 > xs:
             smoothing_parameter = 0.75
-            norm1 = sum([math.pow(c.count,smoothing_parameter) for c not in vocab])
+            norm1 = sum([math.pow(c.count, smoothing_parameter)for c in vocab])
 
-            table_size1 = 1e8
+            table_size1 = 100000000
             table1 = np.zeros(table_size1, dtype=np.int32)
 
             print 'Filling the unigram table for case1'
@@ -143,7 +143,7 @@ class UnigramTable:
             self.table1
         else:
             smoothing_parameter = 0.75
-            norm1 = sum([math.pow(c.count, smoothing_parameter) for c not in vocab])
+            norm1 = sum([math.pow(c.count, smoothing_parameter) for c in vocab])
 
             table_size1 = 1e8
             table1 = np.zeros(table_size1, dtype=np.int32)
@@ -229,50 +229,59 @@ def train_process(pid):
 
         # Init sent, a list of indices of words in line from vocab_hash
         sent = vocab.indices(['<bol>'] + line.split() + ['<eol>'])
+        sentence = vocab.indices(line.split())
+        for sent_po, tokenz in enumerate(sentence):
+            if tokenz in vocab:
+                """code will be filled here"""
+                print 'hello'
+            elif tokenz not in vocab:
+                for sent_pos, token in enumerate(sent):
+                    if word_count % 10000 == 0:
+                        global_word_count.value += (word_count - last_word_count)
+                        last_word_count = word_count
 
-        for sent_pos, token in enumerate(sent):
-            if word_count % 10000 == 0:
-                global_word_count.value += (word_count - last_word_count)
-                last_word_count = word_count
+                        # Recalculate alpha
+                        alpha = starting_alpha * (1 - float(global_word_count.value) / vocab.word_count)
+                        if alpha < starting_alpha * 0.0001: alpha = starting_alpha * 0.0001
 
-                # Recalculate alpha
-                alpha = starting_alpha * (1 - float(global_word_count.value) / vocab.word_count)
-                if alpha < starting_alpha * 0.0001: alpha = starting_alpha * 0.0001
+                        # Print progress info
+                        sys.stdout.write("\rAlpha: %f Progress: %d of %d (%.2f%%)" %
+                                         (alpha, global_word_count.value, vocab.word_count,
+                                          float(global_word_count.value) / vocab.word_count * 100))
+                        sys.stdout.flush()
 
-                # Print progress info
-                sys.stdout.write("\rAlpha: %f Progress: %d of %d (%.2f%%)" %
-                                 (alpha, global_word_count.value, vocab.word_count,
-                                  float(global_word_count.value) / vocab.word_count * 100))
-                sys.stdout.flush()
-            #getting the context
-            # Randomize window size, where win is the max window size
-            current_win = np.random.randint(low=1, high=win + 1)
-            #sent_pos is the index of a particular word of the sentence which is sent
-            context_start = max(sent_pos - current_win, 0)
-            context_end = min(sent_pos + current_win + 1, len(sent))
-            #ek dum correct
-            context = sent[context_start:sent_pos] + sent[sent_pos + 1:context_end]  # Turn into an iterator?
-            #here we can add a context checker
-            for context_word in context:
-                # Init neu1e with zeros
-                neu1e = np.zeros(dim)
-                # Compute neu1e and update syn1
-                if neg > 0: # neg number of negative samples are being called from sample function line:141
-                    classifiers = [(token, 1)] + [(target, 0) for target in table.sample(neg)]
-                #else:
-                #    classifiers = zip(vocab[token].path, vocab[token].code)
-                for target, label in classifiers: #How does this work?$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
-                    #this is where context_word is dot multiplied with target
-                    z = np.dot(syn0[context_word], syn1[target])
-                    p = sigmoid(z)
-                    g = alpha * (label - p)
-                    neu1e += g * syn1[target]  # Error to backpropagate to syn0
-                    syn1[target] += g * syn0[context_word]  # Update syn1
+                        # getting the context
+                        # Randomize window size, where win is the max window size
+                        current_win = np.random.randint(low=1, high=win + 1)
+                        # sent_pos is the index of a particular word of the sentence which is sent
+                        context_start = max(sent_pos - current_win, 0)
+                        context_end = min(sent_pos + current_win + 1, len(sent))
+                        # ek dum correct
+                        context = sent[context_start:sent_pos] + sent[sent_pos + 1:context_end]  # Turn into an iterator?
 
-                # Update syn0
-                syn0[context_word] += neu1e
+                    for context_word in context:
+                        # Init neu1e with zeros
+                        neu1e = np.zeros(dim)
+                        # Compute neu1e and update syn1
+                        if neg > 0: # neg number of negative samples are being called from sample function line:141
+                            classifiers = [(token, 1)] + [(target, 0) for target in table.sample(neg)]
+                        #else:
+                        #    classifiers = zip(vocab[token].path, vocab[token].code)
+                        for target, label in classifiers: #How does this work?$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+                            #this is where context_word is dot multiplied with target
+                            z = np.dot(syn0[context_word], syn1[target])
+                            p = sigmoid(z)
+                            g = alpha * (label - p)
+                            neu1e += g * syn1[target]  # Error to backpropagate to syn0
+                            syn1[target] += g * syn0[context_word]  # Update syn1
 
-        word_count += 1
+                    # Update syn0
+                    syn0[context_word] += neu1e
+
+                word_count += 1
+
+        else:
+            """Code to be filled in here"""
 
     # Print progress info
     global_word_count.value += (word_count - last_word_count) #last_word_count = word_count line194
