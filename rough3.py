@@ -23,14 +23,26 @@ import matplotlib.pyplot as plt
 from multiprocessing import Array
 
 
-if 'Strongman' in open('domain_words.txt').read().lower():
-    print('True')
-else:
-    print('not found')
+def domain_corpus(di):
+    f = open(di).read().lower().split()
+    domain_word_list = []
+    for word in f:
+        domain_word_list.append(word)
+    return(domain_word_list)
 
 
+domain_vocab = domain_corpus('domain_words.txt')
+print(domain_vocab)
+
+MyOper = set(['AND', 'OR', 'NOT'])
+MyList = set(['c1', 'c2', 'NOT', 'c3'])
+
+while not MyList.isdisjoint(MyOper):
+    print("No boolean Operator")
 
 
-table1 = math.pow(10,8)
+"""You can't generally say for x not in y because there are an infinite number of objects that aren't in y.
 
-print(table1)
+For your specific case, I think something like this might work:
+
+[x for x in range(0, n) if x not in y]"""
