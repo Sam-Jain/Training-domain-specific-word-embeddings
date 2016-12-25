@@ -11,15 +11,16 @@ import zipfile
 import matplotlib.pyplot as plt
 import numpy as np, tensorflow as tf
 
-
-
 filename = 'test_data.txt'
+
 # Read the data into a list of strings.
 def read_data(filename):
   with open(filename,'r') as f:
-    data = f.read().split()
+      data = f.read().split()
   return data
 
+#domain_corpus = 'domain_words.txt'
+#domain_words = read_data(domain_corpus)
 
 words = read_data(filename)
 print('Data size', len(words))
@@ -172,7 +173,8 @@ with tf.Session(graph=graph) as session:
   # We must initialize all variables before we use them.
   init.run()
   print("Initialized")
-
+  print(tf.size(normalized_embeddings))
+  print(tf.size(valid_embeddings))
   average_loss = 0
   average_plot = []
   for step in xrange(training_epochs):
@@ -188,15 +190,19 @@ with tf.Session(graph=graph) as session:
 
     if step % 10000 == 0:
         sim = similarity.eval()
-        '''for i in xrange(valid_size):
+        print('this is sim',sim.shape)
+        for i in xrange(valid_size):
             valid_word = reverse_dictionary[valid_examples[i]]
-            top_k = 8  # number of nearest neighbors
+            top_k = 5  # number of nearest neighbors
             nearest = (-sim[i, :]).argsort()[1:top_k + 1]
+            print('this is nearrest',nearest)
+            #print(nearest)
             log_str = "Nearest to %s:" % valid_word
             for k in xrange(top_k):
                 close_word = reverse_dictionary[nearest[k]]
+                print(close_word)
                 log_str = "%s %s," % (log_str, close_word)
-            print(log_str)'''
+            print(log_str)
     final_embeddings = normalized_embeddings.eval()
     #print(final_embeddings)
 
