@@ -25,24 +25,29 @@ from multiprocessing import Array
 
 def domain_corpus(di):
     f = open(di).read().lower().split()
-    domain_word_list = []
+    domain_word_list = set()
     for word in f:
-        domain_word_list.append(word)
+        domain_word_list.add(word)
     return(domain_word_list)
 
 
 domain_vocab = domain_corpus('domain_words.txt')
 print(domain_vocab)
 
-MyOper = set(['AND', 'OR', 'NOT'])
+for ['fifa','golden'] in domain_vocab:
+    print('hello')
+
+'''MyOper = set(['AND', 'OR', 'NOT'])
 MyList = set(['c1', 'c2', 'NOT', 'c3'])
 
 while not MyList.isdisjoint(MyOper):
     print("No boolean Operator")
-
-
+'''
+#list comprehensions
 """You can't generally say for x not in y because there are an infinite number of objects that aren't in y.
 
 For your specific case, I think something like this might work:
 
 [x for x in range(0, n) if x not in y]"""
+
+
