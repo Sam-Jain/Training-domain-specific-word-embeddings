@@ -117,22 +117,17 @@ def domain_corpus(di):
 
 #it gives back a table which is a list of indices from which negative samples are drawn
 class UnigramTable1:
-    """
-    A list of indices of tokens (List of indices is stored in
-     self.path of VocabItem) in the vocab following a power law distribution,
-    used to draw negative samples.
 
-    """
     def __init__(self, vocab):
         #unigram table for (w,c) both belonging to domain_vocab
         pie = 0.5
         smoothing_parameter = 0.75
         xs = np.random.uniform(low=0, high=1)
-        table_size = 1e8
+        table_size = 1e2
         domain_vocab = domain_corpus(di)
         if xs < pie:
-            #norm = sum([math.pow(c.count, smoothing_parameter) for c in range(len(domain_vocab)) if c not in domain_vocab])
-            norm = sum([math.pow(c.count, smoothing_parameter) for c in domain_vocab])
+            norm = sum([math.pow(c.count, smoothing_parameter) for c in range(len(domain_vocab)) if c not in domain_vocab])
+            #norm = sum([math.pow(c.count, smoothing_parameter) for c in domain_vocab])
             table = np.zeros(table_size, dtype=np.uint32)
 
             print 'Filling the unigram table for case1'
@@ -146,7 +141,7 @@ class UnigramTable1:
 
             self.table = table
         else:
-            norm = sum([math.pow(c.count, smoothing_parameter) for c in domain_vocab])
+            norm = sum([math.pow(t.count, smoothing_parameter) for t in domain_vocab])
             table = np.zeros(table_size, dtype=np.uint32)
 
             print 'Filling the unigram table for case1'
@@ -171,7 +166,7 @@ class UnigramTable2:
     def __init__(self, vocab):
         vocab_size = len(vocab)
         power = 0.75
-        table_size = 1e8  # Length of the unigram table
+        table_size = 1e2  # Length of the unigram table
 
         table = np.zeros(table_size, dtype=np.uint32)
         norm = sum([math.pow(t.count, power) for t in vocab])  # Normalizing constant
@@ -196,7 +191,7 @@ class UnigramTable3:
         pie = 0.5
         smoothing_parameter = 0.75
         z = np.random.uniform(low=0, high=1)
-        table_size = 1e8
+        table_size = 1e2
         domain_vocab = domain_corpus(di)
         if z < pie:
             #norm = sum([math.pow(c.count, smoothing_parameter) for c in range(len(domain_vocab)) if c not in domain_vocab])
@@ -256,12 +251,12 @@ def init_net(dim, vocab_size):
     return (w_ip_hidden, w_op_hidden)
 
 #This function trains the vocab
-def train_process(pid):
+def train_process():
     # Set fi to point to the right chunk of training file
-    start = vocab.bytes / num_processes * pid
-    end = vocab.bytes if pid == num_processes - 1 else vocab.bytes / num_processes * (pid + 1)
+    start = 0
+    end = vocab.bytes
     fi.seek(start)
-    print 'Worker %d beginning training at %d, ending at %d' % (pid, start, end)
+    print 'Worker beginning training at %d, ending at %d' % (start, end)
     alpha = starting_alpha
     word_count = 0
     last_word_count = 0
@@ -279,31 +274,33 @@ def train_process(pid):
         for sent_pos, token in enumerate(sent):
             #this will store the current word
             current_token = token
-            #this controls how many time should the updates be made ASK CONFIRM@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+            #this controls how many time should the updates be made ASK CONFIRM
             if word_count % 10000 == 0:
                 global_word_count.value += (word_count - last_word_count)
                 last_word_count = word_count
                 # overall value of alpha is decreasing
                 alpha = starting_alpha * (1 - float(global_word_count.value) / vocab.word_count)
                 if alpha < starting_alpha * 0.0001: alpha = starting_alpha * 0.0001
-                # Print progress info
-                sys.stdout.write("\rAlpha: %f Progress: %d of %d (%.2f%%)" %
-                                 (alpha, global_word_count.value, vocab.word_count,
-                                  float(global_word_count.value) / vocab.word_count * 100))
-                sys.stdout.flush()
-                # getting the context
-                # Randomize window size, where win is the max window size
-                current_win = np.random.randint(low=1, high=win + 1)
-                # sent_pos is the index of a particular word of the sentence which is sent
-                context_start = max(sent_pos - current_win, 0)
-                context_end = min(sent_pos + current_win + 1, len(sent))
-                # ek dum correct
-                context = sent[context_start:sent_pos] + sent[sent_pos + 1:context_end]  # Turn into an iterator?
+
+            sys.stdout.flush()
+            # getting the context
+            # Randomize window size, where win is the max window size
+            current_win = np.random.randint(low=1, high=win + 1)
+            # sent_pos is the index of a particular word of the sentence which is sent
+            context_start = max(sent_pos - current_win, 0)
+            context_end = min(sent_pos + current_win + 1, len(sent))
+            context = sent[context_start:sent_pos] + sent[sent_pos + 1:context_end]  # Turn into an iterator?
             for context_word in context:
                 #This will hold the current context for the current_token
                 current_context = context
                 if current_token and current_context in domain_vocab:
                     print('this is current token and context', current_token, current_context)
+                    if word_count % 10000 == 0:
+                        '''global_word_count.value += (word_count - last_word_count)
+                        last_word_count = word_count'''
+                        # overall value of alpha is decreasing
+                        alpha = starting_alpha * (1 - float(global_word_count.value) / vocab.word_count)
+                        if alpha < starting_alpha * 0.0001: alpha = starting_alpha * 0.0001
                     """This is the first case where (w,c) both belong in Nu"""
                     table = UnigramTable1(vocab)
                     # Init neu1e with zeros
@@ -324,6 +321,12 @@ def train_process(pid):
 
                 elif current_token and current_context not in domain_vocab:
                     """This is the case where none of (w,c) belongs to Nu"""
+                    if word_count % 10000 == 0:
+                        global_word_count.value += (word_count - last_word_count)
+                        last_word_count = word_count
+                        # overall value of alpha is decreasing
+                        '''alpha = starting_alpha * (1 - float(global_word_count.value) / vocab.word_count)
+                        if alpha < starting_alpha * 0.0001: alpha = starting_alpha * 0.0001'''
                     table = UnigramTable2(vocab)
                     # Init neu1e with zeros
                     neu1e = np.zeros(dim)
@@ -340,7 +343,7 @@ def train_process(pid):
                         w_op_hidden[target] += g * w_ip_hidden[context_word]  # Update w_op_hidden
                         # Update w_ip_hidden
                         w_ip_hidden[context_word] += neu1e
-                        '''
+                '''
                 else:
                     """ This is the third case where either one of them (w,c) does not belong to Nu """
                     # Init neu1e with zeros
@@ -361,10 +364,8 @@ def train_process(pid):
                         w_ip_hidden[context_word] += neu1e'''
         word_count += 1
     # Print progress info
-    global_word_count.value += (word_count - last_word_count) #last_word_count = word_count line194
-    sys.stdout.write("\rAlpha: %f Progress: %d of %d (%.2f%%)" %
-                     (alpha, global_word_count.value, vocab.word_count,
-                      float(global_word_count.value) / vocab.word_count * 100))
+    global_word_count.value += (word_count - last_word_count)  # last_word_count = word_count line194
+    sys.stdout.write("\rAlpha: %f Progress:" % alpha)
     sys.stdout.flush()
     fi.close()
 
@@ -382,13 +383,15 @@ def save(vocab, w_ip_hidden, fo, binary):
     fo.close()
 
 #This is the initializer for the pool function i.e. called when pool is called line 276
-def __init_process(*args):
+def global_func(*args):
     global vocab, w_ip_hidden, w_op_hidden, table, cbow, neg, dim, starting_alpha
-    global win, num_processes, global_word_count, fi
+    global win, global_word_count, fi #removed num_processes
 
-    vocab, w_ip_hidden_tmp, w_op_hidden_tmp, table, cbow, neg, dim, starting_alpha, win, num_processes, global_word_count = args[:-1]
+    vocab, w_ip_hidden_tmp, w_op_hidden_tmp, table, cbow, neg, dim, starting_alpha, win, global_word_count = args[:-1]
     print 'this is args', args
+
     fi = open(args[-1], 'r')
+
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', RuntimeWarning)
         #Create a numpy array from a ctypes array or a ctypes POINTER. The numpy array shares the memory with the ctypes object.
@@ -396,7 +399,7 @@ def __init_process(*args):
         w_op_hidden = np.ctypeslib.as_array(w_op_hidden_tmp)
 
 #for training
-def train(fi, fo, cbow, neg, dim, alpha, win, min_count, num_processes, binary):
+def train(fi, fo, cbow, neg, dim, alpha, win, min_count, binary):
     # Read train file to init vocab
     domain_vocab = domain_corpus(di)
     vocab = Vocab(fi, min_count)
@@ -412,11 +415,15 @@ def train(fi, fo, cbow, neg, dim, alpha, win, min_count, num_processes, binary):
     # Begin training using num_processes workers
     t0 = time.time()
     '''******pool is just used to start parallel processes the arguments are as given******'''
-    pool = Pool(processes=num_processes, initializer=__init_process,
-                initargs=(vocab, w_ip_hidden, w_op_hidden, table, cbow, neg, dim, alpha,
-                          win, num_processes, global_word_count, fi))
+
+    global_func(vocab, w_ip_hidden, w_op_hidden, table, cbow, neg, dim, alpha, win, global_word_count, fi)
+
+    #pool = Pool(processes=num_processes, initializer=__init_process,
+    #            initargs=(vocab, w_ip_hidden, w_op_hidden, table, cbow, neg, dim, alpha,
+    #                      win, num_processes, global_word_count, fi))
     #this maps the train_process function with the number of processes
-    print pool.map(train_process, range(num_processes))
+    print train_process()
+    #print pool.map(train_process, range(num_processes))
     t1 = time.time()
 
     print 'Completed training. Training took', (t1 - t0) / 60, 'minutes'
@@ -426,6 +433,6 @@ def train(fi, fo, cbow, neg, dim, alpha, win, min_count, num_processes, binary):
 
 
 di = 'domain_words.txt'
-fi= 'test_data.txt'
-fo= 'final.txt'
-train(fi, fo, 0, 100, 300, 0.01, 2, 5, 2, 0)
+fi = 'test_data.txt'
+fo = 'final.txt'
+train(fi, fo, 0, 10, 300, 0.5, 2, 1, 0)

@@ -31,11 +31,13 @@ def domain_corpus(di):
     return(domain_word_list)
 
 
-domain_vocab = domain_corpus('domain_words.txt')
-print(domain_vocab)
+di = domain_corpus('domain_words.txt')
+print(di)
+if 'fifa' in di:
+    print(True)
+else:
+    print(False)
 
-for ['fifa','golden'] in domain_vocab:
-    print('hello')
 
 '''MyOper = set(['AND', 'OR', 'NOT'])
 MyList = set(['c1', 'c2', 'NOT', 'c3'])

@@ -4,27 +4,29 @@ import struct
 import sys
 import time
 import warnings
+
 import numpy as np
-from multiprocessing import Pool, Value, Array
+
+from multiprocessing import Array
 
 
-# used in sort and Vocab functions dont need to dive deep
 class VocabItem:
     def __init__(self, word):
         self.word = word
-        self.count = 0  # count of word in the list
+        self.count = 0
         self.path = None  # Path (list of indices) from the root to the word (leaf)
         self.code = None  # Huffman encoding
 
 
 class Vocab:
-    # It returns the vocab_items, vocab_hash and word_count
     def __init__(self, fi, min_count):
         vocab_items = []
         vocab_hash = {}
         word_count = 0
         fii = open(fi).read().lower()
         fi = open(fi, 'r')
+        #fi = open(fi, 'r')
+
         # Add special tokens <bol> (beginning of line) and <eol> (end of line)
         for token in ['<bol>', '<eol>']:
             vocab_hash[token] = len(vocab_items)
@@ -64,8 +66,6 @@ class Vocab:
         print 'Total words in training file: %d' % self.word_count
         print 'Total bytes in training file: %d' % self.bytes
         print 'Vocab size: %d' % len(self)
-        print 'this is vocab items', self.vocab_items
-        print 'this is vocab hash', self.vocab_hash
 
     def __getitem__(self, i):
         return self.vocab_items[i]
@@ -79,8 +79,6 @@ class Vocab:
     def __contains__(self, key):
         return key in self.vocab_hash
 
-    # Takes the min_count as input which are the words which will be removed with less than min_count
-    # occurences and returns the vocab_hash dictionary
     def __sort(self, min_count):
         tmp = []
         tmp.append(VocabItem('<unk>'))
@@ -104,77 +102,71 @@ class Vocab:
         self.vocab_items = tmp
         self.vocab_hash = vocab_hash
 
-        print 'this is the other vocab hash', self.vocab_hash
+        print
         print 'Unknown vocab size:', count_unk
 
     def indices(self, tokens):
         return [self.vocab_hash[token] if token in self else self.vocab_hash['<unk>'] for token in tokens]
 
-
-# returns a list of words form domain_corpus
 def domain_corpus(di):
     f = open(di).read().lower().split()
-    domain_word_list = []
+    domain_word_list = set()
     for word in f:
-        domain_word_list.append(word)
-    return (domain_word_list)
+        domain_word_list.add(word)
+    return(domain_word_list)
 
+class UnigramTable1:
 
-# it gives back a table which is a list of indices from which negative samples are drawn
-class UnigramTable:
-    """
-    A list of indices of tokens (List of indices is stored in
-     self.path of VocabItem) in the vocab following a power law distribution,
-    used to draw negative samples.
-    """
-
-    # unigram table for (w,c) both belonging to domain_vocab
-    def table1(self, vocab):
+    def __init__(self, vocab):
+        #unigram table for (w,c) both belonging to domain_vocab
         pie = 0.5
         smoothing_parameter = 0.75
         xs = np.random.uniform(low=0, high=1)
-        table_size1 = 1e8
+        table_size = 1e8
         domain_vocab = domain_corpus(di)
+        table1 = np.zeros(table_size, dtype=np.uint32)
         if xs < pie:
-            norm = sum(
-                [math.pow(c.count, smoothing_parameter) for c in range(len(domain_vocab)) if c not in domain_vocab])
-            # norm = sum([math.pow(c.count, smoothing_parameter) for c in domain_vocab])
-            table1 = np.zeros(table_size1, dtype=np.int32)
+            #norm = sum([math.pow(c.count, smoothing_parameter) for c in range(len(domain_vocab)) if c not in domain_vocab])
+            norm = float(sum([math.pow(c.count, smoothing_parameter)for c in vocab]))
 
             print 'Filling the unigram table for case1'
-            p = 0  # Cumulative probability for case1
+            p = 0 #Cumulative probability for case1
             i = 0
             for j, unigram in enumerate(vocab):
                 p += float(math.pow(unigram.count, smoothing_parameter)) / norm
-                while i < table_size1 and float(i) / table_size1 < p:
+                while i < table_size and float(i) / table_size < p:
                     table1[i] = j
                     i += 1
 
             self.table1 = table1
         else:
-            norm = sum([math.pow(c.count, smoothing_parameter) for c in domain_vocab])
-            table1 = np.zeros(table_size1, dtype=np.int32)
-
+            norm = float(sum([math.pow(t.count, smoothing_parameter) for t in domain_vocab]))
             print 'Filling the unigram table for case1'
             p = 0  # Cumulative probability for case1
             i = 0
             for j, unigram in enumerate(vocab):
                 p += float(math.pow(unigram.count, smoothing_parameter)) / norm
-                while i < table_size1 and float(i) / table_size1 < p:
+                while i < table_size and float(i) / table_size < p:
                     table1[i] = j
                     i += 1
             self.table1 = table1
 
-    # unigram table for the second case
-    def table2(self, vocab):
+            # This is used as the sample to pick the neagtive samples
+
+    def sample(self, count):
+        indices = np.random.randint(low=0, high=len(self.table1), size=count)
+        return [self.table1[i] for i in indices]
+
+class UnigramTable2:
+    def __init__(self, vocab):
         vocab_size = len(vocab)
         power = 0.75
-        table_size = 1e8  # Length of the unigram table
-
-        table2 = np.zeros(table_size, dtype=np.int32)
         norm = sum([math.pow(t.count, power) for t in vocab])  # Normalizing constant
 
-        print 'Filling unigram table'
+        table_size = 1e8  # Length of the unigram table
+        table2 = np.zeros(table_size, dtype=np.uint32)
+
+        print 'Filling the unigram table for case2'
         p = 0  # Cumulative probability
         i = 0
         for j, unigram in enumerate(vocab):
@@ -184,23 +176,50 @@ class UnigramTable:
                 i += 1
         self.table2 = table2
 
-    # unigram table for the third case
-    #def table3(self, vocab):
+    def sample(self, count):
+        iters = np.random.randint(low=0, high=len(self.table2), size=count)
+        return [self.table2[i] for i in iters]
+
+class UnigramTable3:
+    def __init__(self, vocab):
         """This is the third case"""
+        pie = 0.5
+        smoothing_parameter = float(0.75)
+        z = np.random.uniform(low=0, high=1)
+        table_size = 1e8
+        domain_vocab = domain_corpus(di)
+        table3 = np.zeros(table_size, dtype=np.uint32)
+        norm = sum([math.pow(t.count, smoothing_parameter) for t in vocab])
+        #norm = float(sum([math.pow(c.count, smoothing_parameter) for c in domain_vocab]))
+        if z < pie:
+            #norm = sum([math.pow(c.count, smoothing_parameter) for c in range(len(domain_vocab)) if c not in domain_vocab])
 
-    # This is used as the sample to pick the neagtive samples
-    def sample1(self, count):
-        indices = np.random.randint(low=0, high=len(self.table), size=count)
-        return [self.table1[i] for i in indices]
 
-    def sample2(self, count):
-        indices = np.random.randint(low=0, high=len(self.table), size=count)
-        return [self.table2[i] for i in indices]
+            print 'Filling the unigram table for case3'
+            p = 0 #Cumulative probability for case1
+            i = 0
+            for j, unigram in enumerate(vocab):
+                p += float(math.pow(unigram.count, smoothing_parameter)) / norm
+                while i < table_size and float(i) / table_size <p:
+                    table3[i] = j
+                    i += 1
 
-    def sample3(self, count):
-        indices = np.random.randint(low=0, high=len(self.table), size=count)
+            self.table3 = table3
+        else:
+            #norm = float(sum([math.pow(c.count, smoothing_parameter) for c in domain_vocab]))
+            print 'Filling the unigram table for case3'
+            p = 0  # Cumulative probability for case1
+            i = 0
+            for j, unigram in enumerate(vocab):
+                p += float(math.pow(unigram.count, smoothing_parameter)) / norm
+                while i < table_size and float(i) / table_size < p:
+                    table3[i] = j
+                    i += 1
+            self.table3 = table3
+
+    def sample(self, count):
+        indices = np.random.randint(low=0, high=len(self.table3), size=count)
         return [self.table3[i] for i in indices]
-
 
 def sigmoid(z):
     if z > 6:
@@ -211,138 +230,120 @@ def sigmoid(z):
         return 1 / (1 + math.exp(-z))
 
 
-# returns w_ip_hidden and w_op_hidden
-# Init w_ip_hidden with random numbers from a uniform distribution on the interval [-0.5, 0.5]/dim
-# And w_op_hidden with zeros bith as ctype array
 def init_net(dim, vocab_size):
+    # Init syn0 with random numbers from a uniform distribution on the interval [-0.5, 0.5]/dim
     tmp = np.random.uniform(low=-0.5 / dim, high=0.5 / dim, size=(vocab_size, dim))
-    w_ip_hidden = np.ctypeslib.as_ctypes(tmp)
-    w_ip_hidden = Array(w_ip_hidden._type_, w_ip_hidden, lock=False)
-    # Init w_op_hidden with zeros
+    syn0 = np.ctypeslib.as_ctypes(tmp)
+    syn0 = Array(syn0._type_, syn0, lock=False)
+
+    # Init syn1 with zeros
     tmp = np.zeros(shape=(vocab_size, dim))
-    w_op_hidden = np.ctypeslib.as_ctypes(tmp)
-    w_op_hidden = Array(w_op_hidden._type_, w_op_hidden, lock=False)
+    syn1 = np.ctypeslib.as_ctypes(tmp)
+    syn1 = Array(syn1._type_, syn1, lock=False)
 
-    return (w_ip_hidden, w_op_hidden)
+    return (syn0, syn1)
 
 
-# This function trains the vocab
-def train_process(pid):
-    # Set fi to point to the right chunk of training file
-    start = vocab.bytes / num_processes * pid
-    end = vocab.bytes if pid == num_processes - 1 else vocab.bytes / num_processes * (pid + 1)
+def train_process():
+
+    start = 0
+    end = vocab.bytes
     fi.seek(start)
-    print 'Worker %d beginning training at %d, ending at %d' % (pid, start, end)
+    global_word_count = 0
     alpha = starting_alpha
     word_count = 0
     last_word_count = 0
-    # tell returns the current position of the read/write pointer within the file.
+
     while fi.tell() < end:
         line = fi.readline().strip()
         # Skip blank lines
         if not line:
             continue
-
-        # Init sent, a list of indices of words in line from vocab_hash
+        # Init sent, a list of indices of words in line
         sent = vocab.indices(['<bol>'] + line.split() + ['<eol>'])
-        sentence = vocab.indices(line.split())
-        domain_vocab = domain_corpus(di)
+
         for sent_pos, token in enumerate(sent):
-            # this will store the current word
             current_token = token
-            # this controls how many time should the updates be made ASK CONFIRM@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
             if word_count % 10000 == 0:
-                global_word_count.value += (word_count - last_word_count)
+                global_word_count += (word_count - last_word_count)
                 last_word_count = word_count
+
                 # Recalculate alpha
-                alpha = starting_alpha * (1 - float(global_word_count.value) / vocab.word_count)
-                if alpha < starting_alpha * 0.0001: alpha = starting_alpha * 0.0001
-                # Print progress info
-                sys.stdout.write("\rAlpha: %f Progress: %d of %d (%.2f%%)" %
-                                 (alpha, global_word_count.value, vocab.word_count,
-                                  float(global_word_count.value) / vocab.word_count * 100))
-                sys.stdout.flush()
-                # getting the context
-                # Randomize window size, where win is the max window size
-                current_win = np.random.randint(low=1, high=win + 1)
-                # sent_pos is the index of a particular word of the sentence which is sent
-                context_start = max(sent_pos - current_win, 0)
-                context_end = min(sent_pos + current_win + 1, len(sent))
-                # ek dum correct
-                context = sent[context_start:sent_pos] + sent[sent_pos + 1:context_end]  # Turn into an iterator?
+                alpha = starting_alpha * (1 - float(global_word_count) / vocab.word_count)
+                if alpha < starting_alpha * 0.0001:
+                    alpha = starting_alpha * 0.0001
+
+            # Randomize window size, where win is the max window size
+            current_win = np.random.randint(low=1, high=win + 1)
+            context_start = max(sent_pos - current_win, 0)
+            context_end = min(sent_pos + current_win + 1, len(sent))
+            context = sent[context_start:sent_pos] + sent[sent_pos + 1:context_end]  # Turn into an iterator?
+
             for context_word in context:
-                # This will hold the current context for the current_token
-                current_context = context
+                current_context = context_word
                 if current_token and current_context in domain_vocab:
-                    """This is the first case where (w,c) both belong in Nu"""
+
                     # Init neu1e with zeros
                     neu1e = np.zeros(dim)
-                    # Compute neu1e and update w_op_hidden
-                    if neg > 0:  # neg number of negative samples are being called from sample function line:141
-                        classifiers = [(token, 1)] + [(target, 0) for target in table.sample1(neg)]
-                    for target, label in classifiers:  # It iterates over tuple level ie first element of the tuple will be
-                        # the target and second will be label!
-                        # this is where context_word is dot multiplied with target
-                        z = np.dot(w_ip_hidden[context_word], w_op_hidden[target])
+                    # Compute neu1e and update syn1
+                    classifiers = [(token, 1)] + [(target, 0) for target in table1.sample(neg)]
+                    for target, label in classifiers:
+                        z = np.dot(syn0[context_word], syn1[target])
                         p = sigmoid(z)
                         g = alpha * (label - p)
-                        neu1e += g * w_op_hidden[target]  # Error to backpropagate to w_ip_hidden
-                        w_op_hidden[target] += g * w_ip_hidden[context_word]  # Update w_op_hidden
-                        # Update w_ip_hidden
-                        w_ip_hidden[context_word] += neu1e
 
+                        neu1e += g * syn1[target]  # Error to backpropagate to syn0
+                        syn1[target] += g * syn0[context_word]  # Update syn1
+                    # Update syn0
+                    syn0[context_word] += neu1e
                 elif current_token and current_context not in domain_vocab:
-                    """This is the case where none of (w,c) belongs to Nu"""
                     # Init neu1e with zeros
                     neu1e = np.zeros(dim)
-                    # Compute neu1e and update w_op_hidden
-                    if neg > 0:  # neg number of negative samples are being called from sample function line:141
-                        classifiers = [(token, 1)] + [(target, 0) for target in table.sample2(neg)]
-                    for target, label in classifiers:  # It iterates over tuple level ie first element of the tuple will be
-                        # the target and second will be label!
-                        # this is where context_word is dot multiplied with target
-                        z = np.dot(w_ip_hidden[context_word], w_op_hidden[target])
+                    # Compute neu1e and update syn1
+                    classifiers = [(token, 1)] + [(target, 0) for target in table2.sample(neg)]
+                    for target, label in classifiers:
+                        z = np.dot(syn0[context_word], syn1[target])
                         p = sigmoid(z)
                         g = alpha * (label - p)
-                        neu1e += g * w_op_hidden[target]  # Error to backpropagate to w_ip_hidden
-                        w_op_hidden[target] += g * w_ip_hidden[context_word]  # Update w_op_hidden
-                        # Update w_ip_hidden
-                        w_ip_hidden[context_word] += neu1e
 
+                        neu1e += g * syn1[target]  # Error to backpropagate to syn0
+                        syn1[target] += g * syn0[context_word]  # Update syn1
+                    # Update syn0
+                    syn0[context_word] += neu1e
                 else:
-                    """ This is the third case where either one of them (w,c) does not belong to Nu """
                     # Init neu1e with zeros
                     neu1e = np.zeros(dim)
-                    # Compute neu1e and update w_op_hidden
-                    if neg > 0:  # neg number of negative samples are being called from sample function line:141
-                        classifiers = [(token, 1)] + [(target, 0) for target in table.sample3(neg)]
-                    for target, label in classifiers:  # It iterates over tuple level ie first element of the tuple will be
-                        # the target and second will be label!
-                        # this is where context_word is dot multiplied with target
-                        z = np.dot(w_ip_hidden[context_word], w_op_hidden[target])
+                    # Compute neu1e and update syn1
+                    classifiers = [(token, 1)] + [(target, 0) for target in table3.sample(neg)]
+                    for target, label in classifiers:
+                        z = np.dot(syn0[context_word], syn1[target])
                         p = sigmoid(z)
                         g = alpha * (label - p)
-                        neu1e += g * w_op_hidden[target]  # Error to backpropagate to w_ip_hidden
-                        w_op_hidden[target] += g * w_ip_hidden[context_word]  # Update w_op_hidden
-                        # Update w_ip_hidden
-                        w_ip_hidden[context_word] += neu1e
-        word_count += 1
+
+                        neu1e += g * syn1[target]  # Error to backpropagate to syn0
+                        syn1[target] += g * syn0[context_word]  # Update syn1
+                    # Update syn0
+                    syn0[context_word] += neu1e
+
+            word_count += 1
+
     # Print progress info
-    global_word_count.value += (word_count - last_word_count)  # last_word_count = word_count line194
+    global_word_count += (word_count - last_word_count)
+    # Print progress info
     sys.stdout.write("\rAlpha: %f Progress: %d of %d (%.2f%%)" %
-                     (alpha, global_word_count.value, vocab.word_count,
-                      float(global_word_count.value) / vocab.word_count * 100))
+                     (alpha, global_word_count, vocab.word_count,
+                      float(global_word_count) / vocab.word_count * 100))
     sys.stdout.flush()
     fi.close()
 
 
-# for saving the output
-def save(vocab, w_ip_hidden, fo, binary):
+def save(vocab, syn0, fo):
     print 'Saving model to', fo
-    dim = len(w_ip_hidden[0])
+    dim = len(syn0[0])
+
     fo = open(fo, 'w')
-    fo.write('%d %d\n' % (len(w_ip_hidden), dim))
-    for token, vector in zip(vocab, w_ip_hidden):
+    fo.write('%d %d\n' % (len(syn0), dim))
+    for token, vector in zip(vocab, syn0):
         word = token.word
         vector_str = ' '.join([str(s) for s in vector])
         fo.write('%s %s\n' % (word, vector_str))
@@ -350,53 +351,51 @@ def save(vocab, w_ip_hidden, fo, binary):
     fo.close()
 
 
-# This is the initializer for the pool function i.e. called when pool is called line 276
-def __init_process(*args):
-    global vocab, w_ip_hidden, w_op_hidden, table, cbow, neg, dim, starting_alpha
-    global win, num_processes, global_word_count, fi
+def global_func(*args):
+    global vocab, domain_vocab, syn0, syn1, table1, table2, table3, neg, dim, starting_alpha
+    global win, global_word_count, fi
 
-    vocab, w_ip_hidden_tmp, w_op_hidden_tmp, table, cbow, neg, dim, starting_alpha, win, num_processes, global_word_count = args[
-                                                                                                                            :-1]
-    print 'this is args', args
+    vocab, domain_vocab, syn0_tmp, syn1_tmp, table1, table2, table3, neg, dim, starting_alpha, win, global_word_count = args[:-1]
     fi = open(args[-1], 'r')
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', RuntimeWarning)
-        # Create a numpy array from a ctypes array or a ctypes POINTER. The numpy array shares the memory with the ctypes object.
-        w_ip_hidden = np.ctypeslib.as_array(w_ip_hidden_tmp)
-        w_op_hidden = np.ctypeslib.as_array(w_op_hidden_tmp)
+        syn0 = np.ctypeslib.as_array(syn0_tmp)
+        syn1 = np.ctypeslib.as_array(syn1_tmp)
+
+    warnings.filterwarnings('ignore')
 
 
-# for training
-def train(fi, fo, cbow, neg, dim, alpha, win, min_count, num_processes, binary):
+def train(fi, fo, neg, dim, alpha, win, min_count):
+    """#STEP1"""
     # Read train file to init vocab
-    domain_vocab = domain_corpus(di)
     vocab = Vocab(fi, min_count)
-    print('this is vocab', vocab)
+    domain_vocab = domain_corpus(di)
+    """#STEP2"""
     # Init net
-    w_ip_hidden, w_op_hidden = init_net(dim, len(vocab))
-
-    global_word_count = Value('i', 0)
-    table = None
-    if neg > 0:
-        print 'Initializing unigram table'
-        table = UnigramTable.table2(vocab)
+    syn0, syn1 = init_net(dim, len(vocab))
+    """#STEP3"""
+    global_word_count = 0
+    """#STEP4"""
+    table1 = None
+    table2 = None
+    table3 = None
+    print 'Initializing unigram table'
+    table1 = UnigramTable1(vocab)
+    table2 = UnigramTable2(vocab)
+    table3 = UnigramTable3(vocab)
+    global_func(vocab, domain_vocab, syn0, syn1, table1, table2, table3, neg, dim, alpha, win, global_word_count, fi)
+    """"#STEP5"""
     # Begin training using num_processes workers
     t0 = time.time()
-    '''******pool is just used to start parallel processes the arguments are as given******'''
-    pool = Pool(processes=num_processes, initializer=__init_process,
-                initargs=(vocab, w_ip_hidden, w_op_hidden, table, cbow, neg, dim, alpha,
-                          win, num_processes, global_word_count, fi))
-    # this maps the train_process function with the number of processes
-    print pool.map(train_process, range(num_processes))
+    train_process()
     t1 = time.time()
-
     print 'Completed training. Training took', (t1 - t0) / 60, 'minutes'
+    """#STEP6"""
+    # Save model to file
+    save(vocab, syn0, fo)
 
-    # Save model to file the function is defined above
-    save(vocab, w_ip_hidden, fo, binary)
 
-
-di = 'domain_words.txt'
 fi = 'test_data.txt'
-fo = 'final.txt'
-train(fi, fo, 0, 100, 300, 0.01, 2, 5, 1, 0)
+fo = 'test4.txt'
+di = 'domain_words.txt'
+train(fi, fo, 100, 300, 0.01, 1, 1)
