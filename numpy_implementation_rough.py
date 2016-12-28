@@ -126,8 +126,8 @@ class UnigramTable1:
         domain_vocab = domain_corpus(di)
         table1 = np.zeros(table_size, dtype=np.uint32)
         if xs < pie:
-            #norm = sum([math.pow(c.count, smoothing_parameter) for c in range(len(domain_vocab)) if c not in domain_vocab])
-            norm = float(sum([math.pow(c.count, smoothing_parameter)for c in vocab]))
+            norm = len(domain_vocab)
+            #norm = float(sum([math.pow(c.count, smoothing_parameter)for c in vocab]))
 
             print 'Filling the unigram table for case1'
             p = 0 #Cumulative probability for case1
@@ -180,46 +180,6 @@ class UnigramTable2:
         iters = np.random.randint(low=0, high=len(self.table2), size=count)
         return [self.table2[i] for i in iters]
 
-class UnigramTable3:
-    def __init__(self, vocab):
-        """This is the third case"""
-        pie = 0.5
-        smoothing_parameter = float(0.75)
-        z = np.random.uniform(low=0, high=1)
-        table_size = 1e8
-        domain_vocab = domain_corpus(di)
-        table3 = np.zeros(table_size, dtype=np.uint32)
-        norm = sum([math.pow(t.count, smoothing_parameter) for t in vocab])
-        #norm = float(sum([math.pow(c.count, smoothing_parameter) for c in domain_vocab]))
-        if z < pie:
-            #norm = sum([math.pow(c.count, smoothing_parameter) for c in range(len(domain_vocab)) if c not in domain_vocab])
-
-
-            print 'Filling the unigram table for case3'
-            p = 0 #Cumulative probability for case1
-            i = 0
-            for j, unigram in enumerate(vocab):
-                p += float(math.pow(unigram.count, smoothing_parameter)) / norm
-                while i < table_size and float(i) / table_size <p:
-                    table3[i] = j
-                    i += 1
-
-            self.table3 = table3
-        else:
-            #norm = float(sum([math.pow(c.count, smoothing_parameter) for c in domain_vocab]))
-            print 'Filling the unigram table for case3'
-            p = 0  # Cumulative probability for case1
-            i = 0
-            for j, unigram in enumerate(vocab):
-                p += float(math.pow(unigram.count, smoothing_parameter)) / norm
-                while i < table_size and float(i) / table_size < p:
-                    table3[i] = j
-                    i += 1
-            self.table3 = table3
-
-    def sample(self, count):
-        indices = np.random.randint(low=0, high=len(self.table3), size=count)
-        return [self.table3[i] for i in indices]
 
 def sigmoid(z):
     if z > 6:
@@ -277,19 +237,19 @@ def train_process():
             current_win = np.random.randint(low=1, high=win + 1)
             context_start = max(sent_pos - current_win, 0)
             context_end = min(sent_pos + current_win + 1, len(sent))
-            context = sent[context_start:sent_pos] + sent[sent_pos + 1:context_end]  # Turn into an iterator?
+            context = sent[context_start:sent_pos] + sent[sent_pos + 1:context_end]
 
             for context_word in context:
                 current_context = context_word
                 if current_token and current_context in domain_vocab:
-
+                    print 'hello'
                     # Init neu1e with zeros
                     neu1e = np.zeros(dim)
                     # Compute neu1e and update syn1
                     classifiers = [(token, 1)] + [(target, 0) for target in table1.sample(neg)]
                     for target, label in classifiers:
                         z = np.dot(syn0[context_word], syn1[target])
-                        p = sigmoid(z)
+                        p = np.log(sigmoid(z)) * neg
                         g = alpha * (label - p)
 
                         neu1e += g * syn1[target]  # Error to backpropagate to syn0
@@ -311,19 +271,39 @@ def train_process():
                     # Update syn0
                     syn0[context_word] += neu1e
                 else:
-                    # Init neu1e with zeros
-                    neu1e = np.zeros(dim)
-                    # Compute neu1e and update syn1
-                    classifiers = [(token, 1)] + [(target, 0) for target in table3.sample(neg)]
-                    for target, label in classifiers:
-                        z = np.dot(syn0[context_word], syn1[target])
-                        p = sigmoid(z)
-                        g = alpha * (label - p)
+                    z = np.random.uniform(low=0, high=1)
+                    pie0 = 0.5
+                    if z < pie0:
+                        # Init neu1e with zeros
+                        neu1e = np.zeros(dim)
+                        # Compute neu1e and update syn1
+                        classifiers = [(token, 1)] + [(target, 0) for target in context]
 
-                        neu1e += g * syn1[target]  # Error to backpropagate to syn0
-                        syn1[target] += g * syn0[context_word]  # Update syn1
-                    # Update syn0
-                    syn0[context_word] += neu1e
+                        for target, label in classifiers:
+                            z = np.dot(syn0[context_word], syn1[target])
+                            p = np.log(sigmoid(-z))
+                            g = alpha * (label - p)
+
+                            neu1e += g * syn1[target]  # Error to backpropagate to syn0
+                            syn1[target] += g * syn0[context_word]  # Update syn1
+                        # Update syn0
+                        syn0[context_word] += neu1e
+                    else:
+                        # Init neu1e with zeros
+                        neu1e = np.zeros(dim)
+                        # Compute neu1e and update syn1
+                        classifiers = [(token, 1)] + [(target, 0) for target in context]
+
+                        for target, label in classifiers:
+                            z = np.dot(syn0[context_word], syn1[target])
+                            p = np.log(sigmoid(z))
+                            g = alpha * (label - p)
+
+                            neu1e += g * syn1[target]  # Error to backpropagate to syn0
+                            syn1[target] += g * syn0[context_word]  # Update syn1
+                        # Update syn0
+                        syn0[context_word] += neu1e
+
 
             word_count += 1
 
@@ -382,7 +362,6 @@ def train(fi, fo, neg, dim, alpha, win, min_count):
     print 'Initializing unigram table'
     table1 = UnigramTable1(vocab)
     table2 = UnigramTable2(vocab)
-    table3 = UnigramTable3(vocab)
     global_func(vocab, domain_vocab, syn0, syn1, table1, table2, table3, neg, dim, alpha, win, global_word_count, fi)
     """"#STEP5"""
     # Begin training using num_processes workers
@@ -393,9 +372,10 @@ def train(fi, fo, neg, dim, alpha, win, min_count):
     """#STEP6"""
     # Save model to file
     save(vocab, syn0, fo)
+    print syn0
 
 
 fi = 'test_data.txt'
-fo = 'test4.txt'
+fo = 'test6.txt'
 di = 'domain_words.txt'
 train(fi, fo, 100, 300, 0.01, 1, 1)

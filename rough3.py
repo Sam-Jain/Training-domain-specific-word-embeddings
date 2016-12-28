@@ -33,10 +33,8 @@ def domain_corpus(di):
 
 di = domain_corpus('domain_words.txt')
 print(di)
-if 'fifa' in di:
-    print(True)
-else:
-    print(False)
+count = 0
+
 
 
 '''MyOper = set(['AND', 'OR', 'NOT'])

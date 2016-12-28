@@ -29,6 +29,13 @@ A number of players may be replaced by substitutes during the course of the game
 
 A game is officiated by a referee, who has "full authority to enforce the Laws of the Game in connection with the match to which he has been appointed" (Law 5), and whose decisions are final. The referee is assisted by two assistant referees. In many high-level games there is also a fourth official who assists the referee and may replace another official should the need arise.
 
+
+
+Attacker striker ball goal ball boy challenge tackle cleansheet corner corner kick cross pass freekick penalty offside dribbling scoring  assists fouled handball dropped-ball fifa goalkick goalline golden ball
+keeper goalkeeper manager pitch playoff red card yellow card soccer safety club
+
+
+
 Under the Laws, the two basic states of play during a game are ball in play and ball out of play. From the beginning of each playing period with a kick-off until the end of the playing period, the ball is in play at all times, except when either the ball leaves the field of play, or play is stopped by the referee. When the ball becomes out of play, play is restarted by one of eight restart methods depending on how it went out of play:
 Kick-off: following a goal by the opposing team, or to begin each period of play.
 Throw-in: when the ball has crossed the touchline; awarded to the opposing team to that which last touched the ball.
