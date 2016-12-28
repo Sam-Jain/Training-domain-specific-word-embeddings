@@ -1,7 +1,0 @@
-import json
-
-with open("0_9.txt", "rb") as fin:
-    content = json.load(fin)
-
-with open("0_9.txt", "wb") as fout:
-    json.dump(content,fout, indent=1)

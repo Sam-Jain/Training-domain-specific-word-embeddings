@@ -25,7 +25,6 @@ class Vocab:
         word_count = 0
         fii = open(fi).read().lower()
         fi = open(fi, 'r')
-        #fi = open(fi, 'r')
 
         # Add special tokens <bol> (beginning of line) and <eol> (end of line)
         for token in ['<bol>', '<eol>']:
@@ -105,6 +104,9 @@ class Vocab:
         print
         print 'Unknown vocab size:', count_unk
 
+    def get_key(self, i):
+        return self.vocab_hash.keys()[list(self.vocab_hash.values()).index(i)]
+
     def indices(self, tokens):
         return [self.vocab_hash[token] if token in self else self.vocab_hash['<unk>'] for token in tokens]
 
@@ -161,7 +163,7 @@ class UnigramTable2:
     def __init__(self, vocab):
         vocab_size = len(vocab)
         power = 0.75
-        norm = sum([math.pow(t.count, power) for t in vocab])  # Normalizing constant
+        norm = sum([math.pow(t.count, power) for t in vocab])
 
         table_size = 1e8  # Length of the unigram table
         table2 = np.zeros(table_size, dtype=np.uint32)
@@ -180,7 +182,6 @@ class UnigramTable2:
         iters = np.random.randint(low=0, high=len(self.table2), size=count)
         return [self.table2[i] for i in iters]
 
-
 def sigmoid(z):
     if z > 6:
         return 1.0
@@ -188,7 +189,6 @@ def sigmoid(z):
         return 0.0
     else:
         return 1 / (1 + math.exp(-z))
-
 
 def init_net(dim, vocab_size):
     # Init syn0 with random numbers from a uniform distribution on the interval [-0.5, 0.5]/dim
@@ -202,7 +202,6 @@ def init_net(dim, vocab_size):
     syn1 = Array(syn1._type_, syn1, lock=False)
 
     return (syn0, syn1)
-
 
 def train_process():
 
@@ -223,7 +222,7 @@ def train_process():
         sent = vocab.indices(['<bol>'] + line.split() + ['<eol>'])
 
         for sent_pos, token in enumerate(sent):
-            current_token = token
+            current_token = Vocab.get_key(vocab, token)
             if word_count % 10000 == 0:
                 global_word_count += (word_count - last_word_count)
                 last_word_count = word_count
@@ -240,16 +239,17 @@ def train_process():
             context = sent[context_start:sent_pos] + sent[sent_pos + 1:context_end]
 
             for context_word in context:
-                current_context = context_word
-                if current_token and current_context in domain_vocab:
-                    print 'hello'
+                current_context = Vocab.get_key(vocab, context_word)
+                if current_token in domain_vocab and current_context in domain_vocab:
+                    print "this is trained with first case"
+
                     # Init neu1e with zeros
                     neu1e = np.zeros(dim)
                     # Compute neu1e and update syn1
                     classifiers = [(token, 1)] + [(target, 0) for target in table1.sample(neg)]
                     for target, label in classifiers:
                         z = np.dot(syn0[context_word], syn1[target])
-                        p = np.log(sigmoid(z)) * neg
+                        p = sigmoid(z)
                         g = alpha * (label - p)
 
                         neu1e += g * syn1[target]  # Error to backpropagate to syn0
@@ -257,6 +257,7 @@ def train_process():
                     # Update syn0
                     syn0[context_word] += neu1e
                 elif current_token and current_context not in domain_vocab:
+                    print "trained with second case"
                     # Init neu1e with zeros
                     neu1e = np.zeros(dim)
                     # Compute neu1e and update syn1
@@ -271,21 +272,21 @@ def train_process():
                     # Update syn0
                     syn0[context_word] += neu1e
                 else:
-                    z = np.random.uniform(low=0, high=1)
+                    print "trained using third case"
+                    z = np.random.uniform(0, 1)
                     pie0 = 0.5
                     if z < pie0:
                         # Init neu1e with zeros
                         neu1e = np.zeros(dim)
                         # Compute neu1e and update syn1
                         classifiers = [(token, 1)] + [(target, 0) for target in context]
-
                         for target, label in classifiers:
-                            z = np.dot(syn0[context_word], syn1[target])
-                            p = np.log(sigmoid(-z))
+                            z = np.dot(syn0[context_word], syn1[-target])
+                            p = sigmoid(z)
                             g = alpha * (label - p)
 
-                            neu1e += g * syn1[target]  # Error to backpropagate to syn0
-                            syn1[target] += g * syn0[context_word]  # Update syn1
+                            neu1e += g * syn1[-target]  # Error to backpropagate to syn0
+                            syn1[-target] += g * syn0[context_word]  # Update syn1
                         # Update syn0
                         syn0[context_word] += neu1e
                     else:
@@ -293,17 +294,15 @@ def train_process():
                         neu1e = np.zeros(dim)
                         # Compute neu1e and update syn1
                         classifiers = [(token, 1)] + [(target, 0) for target in context]
-
                         for target, label in classifiers:
                             z = np.dot(syn0[context_word], syn1[target])
-                            p = np.log(sigmoid(z))
-                            g = alpha * (label - p)
+                            p = sigmoid(z)
+                            g = alpha * (label + p)
 
                             neu1e += g * syn1[target]  # Error to backpropagate to syn0
                             syn1[target] += g * syn0[context_word]  # Update syn1
                         # Update syn0
                         syn0[context_word] += neu1e
-
 
             word_count += 1
 
@@ -332,10 +331,10 @@ def save(vocab, syn0, fo):
 
 
 def global_func(*args):
-    global vocab, domain_vocab, syn0, syn1, table1, table2, table3, neg, dim, starting_alpha
+    global vocab, domain_vocab, syn0, syn1, table1, table2, neg, dim, starting_alpha
     global win, global_word_count, fi
 
-    vocab, domain_vocab, syn0_tmp, syn1_tmp, table1, table2, table3, neg, dim, starting_alpha, win, global_word_count = args[:-1]
+    vocab, domain_vocab, syn0_tmp, syn1_tmp, table1, table2, neg, dim, starting_alpha, win, global_word_count = args[:-1]
     fi = open(args[-1], 'r')
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', RuntimeWarning)
@@ -358,11 +357,11 @@ def train(fi, fo, neg, dim, alpha, win, min_count):
     """#STEP4"""
     table1 = None
     table2 = None
-    table3 = None
+
     print 'Initializing unigram table'
     table1 = UnigramTable1(vocab)
     table2 = UnigramTable2(vocab)
-    global_func(vocab, domain_vocab, syn0, syn1, table1, table2, table3, neg, dim, alpha, win, global_word_count, fi)
+    global_func(vocab, domain_vocab, syn0, syn1, table1, table2, neg, dim, alpha, win, global_word_count, fi)
     """"#STEP5"""
     # Begin training using num_processes workers
     t0 = time.time()
@@ -372,10 +371,10 @@ def train(fi, fo, neg, dim, alpha, win, min_count):
     """#STEP6"""
     # Save model to file
     save(vocab, syn0, fo)
-    print syn0
+
 
 
 fi = 'test_data.txt'
-fo = 'test6.txt'
+fo = 'test7.txt'
 di = 'domain_words.txt'
 train(fi, fo, 100, 300, 0.01, 1, 1)
