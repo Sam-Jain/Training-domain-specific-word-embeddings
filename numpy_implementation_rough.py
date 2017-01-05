@@ -4,10 +4,15 @@ import struct
 import sys
 import time
 import warnings
-
+import pickle
+import string
+from bs4 import BeautifulSoup
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
 import numpy as np
-
+from scipy import spatial
 from multiprocessing import Array
+from bs4 import BeautifulSoup
 
 
 class VocabItem:
@@ -23,7 +28,7 @@ class Vocab:
         vocab_items = []
         vocab_hash = {}
         word_count = 0
-        fii = open(fi).read().lower()
+
         fi = open(fi, 'r')
 
         # Add special tokens <bol> (beginning of line) and <eol> (end of line)
@@ -316,18 +321,32 @@ def train_process():
     fi.close()
 
 
-def save(vocab, syn0, fo):
+def save(vocab, syn0, fo, fo2):
     print 'Saving model to', fo
     dim = len(syn0[0])
-
+    #saving the names of the words
     fo = open(fo, 'w')
+    fop = open('pickle_tokens', 'wb')
     fo.write('%d %d\n' % (len(syn0), dim))
     for token, vector in zip(vocab, syn0):
         word = token.word
-        vector_str = ' '.join([str(s) for s in vector])
-        fo.write('%s %s\n' % (word, vector_str))
+        #vector_str = ' '.join([str(s) for s in vector])
+        fo.write('%s\n' % (word))
+        pickle.dump(word, fop)
 
     fo.close()
+    fop.close()
+    #saving the numpy arrays of word vectors
+    fo2 = open(fo2, 'w')
+    fop2 = open('pickle_vector', 'wb')
+    fo2.write('%d %d\n' % (len(syn0), dim))
+    for token, vector in zip(vocab, syn0):
+        #word = token.word
+        vector_str = np.array(','.join([str(s) for s in vector]))
+        fo2.write('%s\n' % (vector_str))
+        pickle.dump(vector_str, fo2)
+    fo2.close()
+    fop2.close()
 
 
 def global_func(*args):
@@ -343,9 +362,24 @@ def global_func(*args):
 
     warnings.filterwarnings('ignore')
 
+def similarity(i1, i2):
+    return (1- spatial.distance.cosine(i1, i2))
 
 def train(fi, fo, neg, dim, alpha, win, min_count):
     """#STEP1"""
+    '''# stop words from nltk
+    stop_words = str(set(stopwords.words("english")))
+    # parsing the text
+    soup = BeautifulSoup(open('20040105'), "lxml")
+    corpus = (soup.get_text())
+    example_words = str(word_tokenize(corpus))
+    # removing punctuations
+    example_words = str(filter(lambda x: x not in string.punctuation, example_words))
+    # removing stop_words
+    cleaned_text = str(filter(lambda x: x not in stop_words, example_words))
+    f = open(fi, 'w')
+    f.write(cleaned_text)
+    print 'cleaned input file ready'''
     # Read train file to init vocab
     vocab = Vocab(fi, min_count)
     domain_vocab = domain_corpus(di)
@@ -370,11 +404,13 @@ def train(fi, fo, neg, dim, alpha, win, min_count):
     print 'Completed training. Training took', (t1 - t0) / 60, 'minutes'
     """#STEP6"""
     # Save model to file
-    save(vocab, syn0, fo)
+    save(vocab, syn0, fo, fo2)
+    #this is goal and goalkick
 
 
 
 fi = 'test_data.txt'
-fo = 'test7.txt'
-di = 'domain_words.txt'
+fo = 'list_of_words.txt'
+fo2 = 'numpy_array_vectors.txt'
+di = 'Loughran_McDonald_AggregateIPOWordList.txt'
 train(fi, fo, 100, 300, 0.01, 1, 1)
